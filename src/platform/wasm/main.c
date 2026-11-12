@@ -142,11 +142,13 @@ typedef struct {
 
 static CallbackStorage callbackStorage;
 
+// NKS: enviar notificaciones sin bloquear el hilo del núcleo evita esperas cruzadas
+// al pausar desde el hilo principal. Los callbacks JS de esta API no retornan datos.
 // Macro to create wrapper functions, necessary as some core callbacks want to access
 // things like the file system on the CPU thread, which can only be done on the main thread.
 #define DEFINE_WRAPPER(field)                            \
 	static void wrapped_##field(void* context) {         \
-		MAIN_THREAD_EM_ASM(                              \
+		MAIN_THREAD_ASYNC_EM_ASM(                              \
 		    {                                            \
 			    const funcPtr = $0;                      \
 			    const ctx = $1;                          \
