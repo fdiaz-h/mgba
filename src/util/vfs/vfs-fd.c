@@ -271,7 +271,11 @@ static bool _vfdSync(struct VFile* vf, void* buffer, size_t size) {
 #endif
 	}
 	if (ret == 0) {
+#ifndef __EMSCRIPTEN__
+		// Web fd_sync waits for IDBFS.syncfs and the main event loop; waiting
+		// for the core there would deadlock. The host persists on savedataUpdated.
 		ret = fsync(vfd->fd);
+#endif
 	}
 #ifdef __EMSCRIPTEN__
 	EM_ASM(FS.syncfs(function (err) { assert(!err); }));
