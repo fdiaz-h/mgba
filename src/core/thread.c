@@ -58,8 +58,27 @@ static void _changeState(struct mCoreThreadInternal* threadContext, enum mCoreTh
 	ConditionWake(&threadContext->stateOffThreadCond);
 }
 
+#ifdef __EMSCRIPTEN__
+// El hilo del núcleo puede esperar una llamada delegada al navegador (p. ej. E/S).
+// Atenderla sin stateMutex permite que el núcleo complete la transición esperada.
+static void _processMainBrowserCalls(struct mCoreThreadInternal* threadContext) {
+	if (emscripten_is_main_browser_thread()) {
+		MutexUnlock(&threadContext->stateMutex);
+		emscripten_current_thread_process_queued_calls();
+		sched_yield();
+		MutexLock(&threadContext->stateMutex);
+	}
+}
+#endif
+
 static void _waitOnInterrupt(struct mCoreThreadInternal* threadContext) {
 	while (threadContext->state == mTHREAD_INTERRUPTED || threadContext->state == mTHREAD_INTERRUPTING) {
+#ifdef __EMSCRIPTEN__
+		if (emscripten_is_main_browser_thread()) {
+			_processMainBrowserCalls(threadContext);
+			continue;
+		}
+#endif
 		ConditionWait(&threadContext->stateOnThreadCond, &threadContext->stateMutex);
 	}
 }
@@ -122,6 +141,9 @@ static void _wait(struct mCoreThreadInternal* threadContext) {
 
 	MutexLock(&threadContext->stateMutex);
 	ConditionWake(&threadContext->stateOnThreadCond);
+#ifdef __EMSCRIPTEN__
+	_processMainBrowserCalls(threadContext);
+#endif
 }
 
 static void _waitOnRequest(struct mCoreThreadInternal* threadContext, enum mCoreThreadRequest request) {
